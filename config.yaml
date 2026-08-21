@@ -1,0 +1,59 @@
+# ============================================
+# Anomaly Agent — Configuration
+# ============================================
+excel:
+  path: "superstore_daily_metrics.xlsx"
+  sheet_name: "Sheet1"                 # sheet name
+  date_column: "Date"                  # column with dates (must be sortable/chronological)
+  metric_columns:                      # numeric columns to monitor
+    - "Total_Sales"
+    - "Order_Count"
+    - "Avg_Order_Value"
+    - "Unique_Customers"
+
+# Business context per metric — used in the summary so it reads like
+# a human analyst wrote it, not a raw stats dump.
+business_context:
+  Total_Sales: "Total daily revenue across all orders. Drops here directly hit revenue targets."
+  Order_Count: "Number of distinct orders placed that day. Dips often mean demand or traffic issues."
+  Avg_Order_Value: "Average revenue per order. Spikes/drops often mean a bulk order or a pricing/discount change."
+  Unique_Customers: "Number of distinct customers who ordered. Falling counts signal weakening demand or churn."
+
+detection:
+  scan_mode: "latest"  # "latest" = check only today's row (use this for daily production runs)
+                             # "all_history" = check every row (use this to backtest/demo on historical data)
+  method: "zscore"          # "zscore" or "pct_change"
+  window: 30                # rolling window size (in rows/periods). Tuned for noisy daily sales data
+                             # — a small window (e.g. 7) will flag normal day-to-day/weekday noise as anomalies.
+  zscore_threshold: 4.5     # flag if |zscore| > this. Tuned high because raw daily order counts/sales
+                             # are naturally volatile (few big orders can swing the day a lot).
+                             # If your metric is smoother (e.g. monthly revenue), 2.0-3.0 works better.
+  pct_change_threshold: 20  # flag if % change vs previous period > this (used if method = pct_change)
+  min_history: 30           # minimum data points needed before flagging anomalies
+
+# Optional: use Claude API to write a richer, more natural-language summary.
+# Leave blank / omit to just use the built-in template-based summary (still works fine).
+ai_summary:
+  enabled: false
+  model: "claude-sonnet-4-6"
+  # API key is read from environment variable ANTHROPIC_API_KEY (do NOT put it here)
+
+email:
+  enabled: true
+  smtp_host: "smtp.gmail.com"    # Gmail SMTP (works for any Gmail/Workspace sender)
+  smtp_port: 587
+  sender_email: "muskchauhan296@gmail.com"
+  # App password (NOT your normal Gmail password) is read from env var EMAIL_APP_PASSWORD
+  # Create one at: https://myaccount.google.com/apppasswords (needs 2FA enabled on the account)
+  recipients:
+    - "muskchauhan296@gmail.com"
+  subject_prefix: "[Anomaly Alert]"
+
+# If true, script runs but never actually sends email (prints to console instead).
+# Great for Day 1-2 testing.
+dry_run: false
+
+# Schedule: agent runs once each time it's invoked. Scheduling is handled
+# outside this script (cron / Task Scheduler) — see run_daily.sh / README.
+# Default recommendation: once a day, right after previous day's data is final
+# (e.g. 9:00 AM), so it's fast enough to act on but not noisy like real-time.
